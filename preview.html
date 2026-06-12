@@ -378,6 +378,10 @@
   </main>
 
   <script>
+    const PUBLIC_AGENT_ENDPOINT = "https://endpoint-14358055-e169-46fc-9328-8e14537c46cd.agentbase-runtime.aiplatform.vngcloud.vn";
+    const isLocalHost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+    const API_BASE = isLocalHost ? "" : PUBLIC_AGENT_ENDPOINT;
+
     const demoPayload = {
       message: "Performance hôm nay của AppID 4326 như thế nào?",
       use_tableau_live: true,
@@ -450,7 +454,7 @@
     async function postPayload(payload) {
       answerEl.textContent = "Bé Hadi đang phân tích...";
       rawEl.textContent = "";
-      const res = await fetch("/invocations", {
+      const res = await fetch(`${API_BASE}/invocations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -475,7 +479,7 @@
 
     async function checkHealth() {
       try {
-        const res = await fetch("/health");
+        const res = await fetch(`${API_BASE}/health`);
         setStatus(res.ok, res.ok ? "Server đang chạy" : `Health returned ${res.status}`);
       } catch {
         setStatus(false, "Server chưa chạy");
