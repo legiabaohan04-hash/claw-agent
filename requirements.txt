@@ -3,3 +3,6 @@ python-dotenv
 openai>=1.0.0
 fastapi
 uvicorn
+pypdf
+python-docx
+openpyxl

@@ -1,3 +1,4 @@
+import base64
 import csv
 import io
 import json
@@ -28,6 +29,21 @@ try:
 except Exception:  # pragma: no cover - optional dependency at runtime
     OpenAI = None
 
+try:
+    from pypdf import PdfReader
+except Exception:  # pragma: no cover - optional dependency at runtime
+    PdfReader = None
+
+try:
+    from docx import Document
+except Exception:  # pragma: no cover - optional dependency at runtime
+    Document = None
+
+try:
+    from openpyxl import load_workbook
+except Exception:  # pragma: no cover - optional dependency at runtime
+    load_workbook = None
+
 
 load_dotenv()
 
@@ -48,6 +64,92 @@ def parse_csv_text(text: str) -> List[Dict[str, str]]:
         return []
     reader = csv.DictReader(io.StringIO(text.strip()))
     return [{k: (v or "").strip() for k, v in row.items()} for row in reader]
+
+
+def decode_uploaded_data_url(data_url: str) -> bytes:
+    if not data_url:
+        return b""
+    if "," in data_url:
+        data_url = data_url.split(",", 1)[1]
+    return base64.b64decode(data_url)
+
+
+def extract_text_from_xlsx(content: bytes, max_rows: int = 80, max_cols: int = 18) -> str:
+    if not load_workbook:
+        return "[Chưa cài openpyxl nên chưa đọc được file Excel.]"
+    workbook = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+    chunks = []
+    for sheet in workbook.worksheets[:4]:
+        chunks.append(f"[Sheet: {sheet.title}]")
+        for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+            if row_index > max_rows:
+                chunks.append("...")
+                break
+            values = ["" if value is None else str(value) for value in row[:max_cols]]
+            if any(value.strip() for value in values):
+                chunks.append(",".join(values))
+    return "\n".join(chunks).strip()
+
+
+def extract_text_from_pdf(content: bytes, max_pages: int = 8) -> str:
+    if not PdfReader:
+        return "[Chưa cài pypdf nên chưa đọc được file PDF.]"
+    reader = PdfReader(io.BytesIO(content))
+    pages = []
+    for page in reader.pages[:max_pages]:
+        pages.append(page.extract_text() or "")
+    return "\n".join(pages).strip()
+
+
+def extract_text_from_docx(content: bytes) -> str:
+    if not Document:
+        return "[Chưa cài python-docx nên chưa đọc được file Word.]"
+    document = Document(io.BytesIO(content))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    return "\n".join(paragraphs).strip()
+
+
+def extract_uploaded_file_text(file_info: Dict[str, Any], max_chars: int = 14000) -> Dict[str, Any]:
+    name = str(file_info.get("name") or "uploaded-file")
+    lower_name = name.lower()
+    file_type = str(file_info.get("type") or "")
+    text = str(file_info.get("text") or "")
+    error = file_info.get("error")
+    if error:
+        return {"name": name, "type": file_type, "available": False, "error": error}
+    try:
+        content = decode_uploaded_data_url(str(file_info.get("data_url") or ""))
+        if not text:
+            if lower_name.endswith((".csv", ".txt")) or file_type.startswith("text/"):
+                text = content.decode("utf-8-sig", errors="replace")
+            elif lower_name.endswith((".xlsx", ".xlsm")):
+                text = extract_text_from_xlsx(content)
+            elif lower_name.endswith(".pdf"):
+                text = extract_text_from_pdf(content)
+            elif lower_name.endswith(".docx"):
+                text = extract_text_from_docx(content)
+            elif lower_name.endswith(".doc"):
+                text = "[File .doc đời cũ chưa được hỗ trợ đọc trực tiếp; vui lòng đổi sang .docx hoặc PDF.]"
+            else:
+                text = "[Định dạng file chưa được hỗ trợ đọc trực tiếp.]"
+    except Exception as exc:
+        return {"name": name, "type": file_type, "available": False, "error": safe_exception_message(exc, 300)}
+
+    text = text.strip()
+    return {
+        "name": name,
+        "type": file_type,
+        "available": bool(text),
+        "text": text[:max_chars],
+        "truncated": len(text) > max_chars,
+    }
+
+
+def summarize_uploaded_files(files: Any) -> Dict[str, Any]:
+    if not isinstance(files, list) or not files:
+        return {"available": False, "files": []}
+    extracted = [extract_uploaded_file_text(file_info) for file_info in files if isinstance(file_info, dict)]
+    return {"available": any(item.get("available") for item in extracted), "files": extracted}
 
 
 def env_value(*names: str, default: str = "") -> str:
@@ -1407,6 +1509,7 @@ Answer rules:
 - For product or AppID breakdowns, include a compact table-style list with product/AppID/SKU, latest TPV/MPU, change vs previous period, and status.
 - Apply business rules from the knowledge base: MoM drop >5% is not good, drop >=15% is alerting, MTD below same-day previous month is not good.
 - Ignore MWEB/Others by default unless the user explicitly asks about it.
+- If uploaded_files are available, use their extracted text as additional business/data context. If the file contains rows or report content that directly answer the user question, summarize that content clearly and state that the answer uses the uploaded file.
 
 Suggested answer shape:
 1. Câu trả lời ngắn
@@ -1499,6 +1602,7 @@ def handle_payload(payload: dict, context: RequestContext) -> dict:
         else:
             data = {}
 
+    uploaded_files = summarize_uploaded_files(payload.get("uploaded_files"))
     performance_rows = parse_csv_text(data.get("insurance_performance_csv", ""))
     product_performance_rows = parse_csv_text(data.get("insurance_product_performance_csv", ""))
     traffic_detail_rows = parse_csv_text(data.get("insurance_traffic_detail_csv", ""))
@@ -1518,6 +1622,7 @@ def handle_payload(payload: dict, context: RequestContext) -> dict:
         "performance": summarize_performance(performance_rows),
         "traffic": summarize_traffic(traffic_rows),
         "promotion": summarize_promotion(promotion_rows),
+        "uploaded_files": uploaded_files,
         "data_source": {
             "tableau_live_requested": use_tableau_live,
             "tableau_live_used": tableau_metadata.get("used", False),
