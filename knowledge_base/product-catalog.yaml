@@ -1,0 +1,86 @@
+ownership_notes:
+  han:
+    description: "Products highlighted yellow in the source screenshot are managed by Han."
+  tran:
+    description: "Products not highlighted yellow are managed by Tran."
+  key_products:
+    description: "Products highlighted red in the source screenshot are key products."
+  ignore_by_default:
+    - group: "MWEB"
+      dashboard_label: "Others"
+      reason: "MWEB/Others is not a primary focus unless explicitly requested."
+
+product_groups:
+  bill:
+    owner: "Tran unless highlighted yellow"
+    products:
+      - code: "3394"
+        name: "Bao hiem man hinh dien thoai"
+        key_product: true
+      - code: "3935"
+        name: "BaoHiemNhaTichHopPVI"
+      - code: "4015"
+        name: "Bao hiem Song tu tin Fuse 4.000VND"
+      - code: "4041"
+        name: "Bao hiem Hoc duong vui khoe Fuse 1 nam / 6 thang"
+      - code: "4042"
+        name: "Bao hiem Suc khoe tich luy Fuse"
+      - code: "4491"
+        name: "Bao hiem Song An Vui ChubbGI"
+        owner_hint: "Han"
+        key_product: true
+
+  cyber:
+    owner: "Tran unless highlighted yellow"
+    products:
+      - code: "3682"
+        name: "Bao hiem an ninh mang VBI 3.000VND"
+        key_product: true
+      - code: "3682"
+        name: "Bao hiem an ninh mang VBI 5.000VND"
+
+  mweb:
+    owner: "Not a focus"
+    dashboard_label: "Others"
+    ignore_by_default: true
+    products:
+      - code: "1020"
+        name: "Bao hiem Savemoney Tai nan 45.000 VND"
+      - code: "3835"
+        name: "Bao hiem nha SaveMoney ABIC"
+      - code: "3951"
+        name: "Bao hiem Suc khoe / Tai nan / Tai san / Ung thu"
+
+  tnds:
+    owner: "Han"
+    products:
+      - code: "3507"
+        name: "Bao hiem Savemoney O to TNDS"
+        key_product: true
+      - code: "3951"
+        name: "Bao hiem O to TNDS / Xe may TNDS"
+      - code: "4326"
+        name: "Bao hiem Trach nhiem dan su bat buoc"
+        key_product: true
+
+  travel:
+    owner: "Tran unless highlighted yellow"
+    products:
+      - code: "3274"
+        name: "Bao hiem Quoc noi Du lich 45.000 VND"
+        key_product: true
+      - code: "3274"
+        name: "Bao hiem Quoc noi Tre huy 50.000 VND"
+        key_product: true
+      - code: "3676"
+        name: "Bao hiem chuyen di 10.000VND / 20.000VND"
+      - code: "3834"
+        name: "Bao hiem chuyen bay quoc te Chubb"
+      - code: "3951"
+        name: "Bao hiem Du lich"
+
+normalization_rules:
+  - "Use AppID/SKU/App Name/Product Name from dashboards when available."
+  - "If code appears multiple times, use SKU/App Name text to disambiguate."
+  - "Treat dashboard Product Name = Distribution as insurance distribution unless a more specific product filter is selected."
+  - "Map MWEB to Others and ignore by default."
