@@ -193,6 +193,42 @@ def rows_for_app_id(rows: List[Dict[str, str]], app_id: str) -> List[Dict[str, s
     return [row for row in rows if row_matches_app_id(row, app_id)]
 
 
+def requested_metric_keys(message: str) -> List[str]:
+    text = normalize_text(message)
+    requested = []
+    if "tpv" in text or "doanh thu" in text or "total payment value" in text:
+        requested.append("tpv")
+    if "mpu" in text or "paying user" in text:
+        requested.append("mpu")
+    if "aov" in text or "average order value" in text:
+        requested.append("aov")
+    if not requested:
+        requested = ["tpv", "mpu"]
+    return requested
+
+
+def metric_parts_for_answer(metrics: Dict[str, Optional[float]], requested_keys: List[str]) -> List[str]:
+    labels = {
+        "tpv": "TPV",
+        "mpu": "MPU",
+        "aov": "AOV",
+    }
+    parts = []
+    for key in requested_keys:
+        if key in labels:
+            parts.append(f"{labels[key]} {format_number(metrics.get(key))}")
+    return parts
+
+
+def metric_change_parts(item: Dict[str, Any], requested_keys: List[str]) -> List[str]:
+    parts = []
+    if "tpv" in requested_keys:
+        parts.append(f"TPV change {pct_text(item.get('tpv_change'))}")
+    if "mpu" in requested_keys:
+        parts.append(f"MPU change {pct_text(item.get('mpu_change'))}")
+    return parts
+
+
 def split_env_list(value: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -438,8 +474,6 @@ DIMENSION_ALIASES = {
 METRIC_ALIASES = {
     "tpv": ["TPV", "Total Payment Value"],
     "mpu": ["MPU", "USERS_DAILY", "Users", "Paying Users", "Success Users"],
-    "npu": ["NPU", "#NPU", "#NPU [M]"],
-    "fpu": ["FPU", "#FPU", "#FPU REPORT-CA..", "#FPU MERCHANT.."],
     "aov": ["AOV", "Average Order Value"],
     "transactions": ["TRANS", "Transaction", "Transactions", "Promo Trans"],
     "load": ["LOAD VALUE", "Access Users", "Load", "Traffic"],
@@ -842,7 +876,7 @@ def build_daily_answer(summaries: Dict[str, Any]) -> str:
         previous = perf.get("previous") or {}
         lines.append(
             f"- Performance: {latest.get('period')} đạt TPV {format_number(latest.get('tpv'))}, "
-            f"users {format_number(latest.get('users'))}; so với {previous.get('period', 'kỳ trước')} "
+            f"MPU {format_number(latest.get('users'))}; so với {previous.get('period', 'kỳ trước')} "
             f"TPV thay đổi {pct_text(perf.get('tpv_change'))}, trạng thái {perf.get('health')}."
         )
 
@@ -991,13 +1025,15 @@ def build_incentive_answer(summaries: Dict[str, Any]) -> str:
     lines.append(
         "- Nhận định: cost/TPV quanh 50% là cao, nên cần soi lại mục tiêu campaign: acquisition, retention hay subsidy bắt buộc."
     )
-    lines.append("- Hành động đề xuất: tối ưu hoặc dừng các campaign có cost/TPV cao nhưng NPU/FPU thấp; giữ campaign nếu chứng minh được uplift hoặc resurrected users tốt.")
+    lines.append("- Hành động đề xuất: tối ưu hoặc dừng các campaign có cost/TPV cao nhưng TPV/MPU thấp; giữ campaign nếu chứng minh được uplift tốt.")
     return "\n".join(lines)
 
 
 def build_product_answer(summaries: Dict[str, Any]) -> str:
     perf = summaries.get("performance", {})
-    requested_app_id = app_id_from_message(summaries.get("question", ""))
+    question = summaries.get("question", "")
+    requested_app_id = app_id_from_message(question)
+    requested_metrics = requested_metric_keys(question)
     lines = ["Chẩn đoán Performance"]
     breakdown = summaries.get("breakdowns", {}).get("product_performance", {})
     focus_matches = [
@@ -1036,51 +1072,38 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
                 tpv_change = item.get("tpv_change")
                 mpu_change = item.get("mpu_change")
                 if mpu_change is not None and mpu_change <= -0.15:
-                    focused_health = "cần chú ý vì MPU/users giảm mạnh"
+                    focused_health = "cần chú ý vì MPU giảm mạnh"
                 elif tpv_change is not None and tpv_change <= -0.15:
                     focused_health = "báo động vì TPV giảm mạnh"
                 elif tpv_change is not None and tpv_change >= 0 and (mpu_change is None or mpu_change >= 0):
                     focused_health = "tốt"
                 else:
                     focused_health = "cần theo dõi thêm"
-                metric_parts = [
-                    f"TPV {format_number(latest.get('tpv'))}",
-                    f"MPU/users {format_number(latest.get('mpu'))}",
-                ]
-                if latest.get("npu") is not None:
-                    metric_parts.append(f"NPU {format_number(latest.get('npu'))}")
-                if latest.get("fpu") is not None:
-                    metric_parts.append(f"FPU {format_number(latest.get('fpu'))}")
-                if latest.get("aov") is not None:
-                    metric_parts.append(f"AOV {format_number(latest.get('aov'))}")
+                metric_parts = metric_parts_for_answer(latest, requested_metrics)
                 lines.append(
                     f"  - {item.get('name')}: kỳ {item.get('latest_period')} đạt "
                     f"{', '.join(metric_parts)}."
                 )
+                change_parts = metric_change_parts(item, requested_metrics)
                 lines.append(
-                    f"    So với {item.get('previous_period') or 'kỳ trước'}: TPV change {pct_text(tpv_change)}, "
-                    f"MPU/users change {pct_text(mpu_change)}, trạng thái {focused_health}."
+                    f"    So với {item.get('previous_period') or 'kỳ trước'}: {', '.join(change_parts)}, "
+                    f"trạng thái {focused_health}."
                 )
                 if previous:
-                    previous_parts = [
-                        f"TPV {format_number(previous.get('tpv'))}",
-                        f"MPU/users {format_number(previous.get('mpu'))}",
-                    ]
-                    if previous.get("aov") is not None:
-                        previous_parts.append(f"AOV {format_number(previous.get('aov'))}")
+                    previous_parts = metric_parts_for_answer(previous, requested_metrics)
                     lines.append(
                         f"    Baseline trước đó: {', '.join(previous_parts)}."
                     )
                 if tpv_change is not None and tpv_change >= 0 and (mpu_change is None or mpu_change >= 0):
                     focused_notes.append(
-                        f"{item.get('name')} đang tích cực: TPV và MPU/users đều tăng hoặc giữ được nền."
+                        f"{item.get('name')} đang tích cực: TPV và MPU đều tăng hoặc giữ được nền."
                     )
                     focused_actions.append(
                         "tiếp tục theo dõi source/campaign để biết tăng trưởng đến từ organic hay incentive."
                     )
                 elif mpu_change is not None and mpu_change < 0 <= (tpv_change or 0):
                     focused_notes.append(
-                        f"{item.get('name')} có TPV tăng nhưng MPU/users giảm, tăng trưởng có thể đến từ AOV/mix giao dịch."
+                        f"{item.get('name')} có TPV tăng nhưng MPU giảm, tăng trưởng có thể đến từ AOV/mix giao dịch."
                     )
                     focused_actions.append(
                         "kiểm tra conversion funnel và nhóm user/source bị hụt để tránh mất nền người mua."
@@ -1110,8 +1133,7 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
             metrics = match.get("metrics", {})
             lines.append(
                 f"  - {match.get('matched_fields')} | period {match.get('period')} | "
-                f"TPV {format_number(metrics.get('tpv'))}, MPU/users {format_number(metrics.get('mpu'))}, "
-                f"AOV {format_number(metrics.get('aov'))}."
+                f"{', '.join(metric_parts_for_answer(metrics, requested_metrics))}."
             )
         lines.append("- Chưa đủ dữ liệu nhiều kỳ để tính tăng/giảm cho đúng AppID/SKU này.")
         return "\n".join(lines)
@@ -1130,15 +1152,14 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
                     item = (breakdown.get("items") or [{}])[0]
                     latest = item.get("latest", {})
                     previous = item.get("previous", {})
+                    metric_parts = metric_parts_for_answer(latest, requested_metrics)
+                    change_parts = metric_change_parts(item, requested_metrics)
                     lines.append(
-                        f"- Kết quả sau filter: {item.get('latest_period')} TPV {format_number(latest.get('tpv'))}, "
-                        f"MPU/users {format_number(latest.get('mpu'))}, NPU {format_number(latest.get('npu'))}, "
-                        f"FPU {format_number(latest.get('fpu'))}, AOV {format_number(latest.get('aov'))}."
+                        f"- Kết quả sau filter: {item.get('latest_period')} {', '.join(metric_parts)}."
                     )
                     lines.append(
-                        f"- So với {item.get('previous_period') or 'kỳ trước'}: TPV change {pct_text(item.get('tpv_change'))}, "
-                        f"MPU/users change {pct_text(item.get('mpu_change'))}; baseline TPV {format_number(previous.get('tpv'))}, "
-                        f"MPU/users {format_number(previous.get('mpu'))}."
+                        f"- So với {item.get('previous_period') or 'kỳ trước'}: {', '.join(change_parts)}; "
+                        f"baseline {', '.join(metric_parts_for_answer(previous, requested_metrics))}."
                     )
                     lines.append("- View hiện trả aggregate sau filter nên chưa có breakdown nhỏ hơn.")
                     return "\n".join(lines)
@@ -1153,13 +1174,13 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
                     ]
                 )
         lines.append(
-            f"- Breakdown theo {breakdown.get('dimension_field')} có {breakdown.get('total_groups')} nhóm. Top nhóm theo TPV/users:"
+            f"- Breakdown theo {breakdown.get('dimension_field')} có {breakdown.get('total_groups')} nhóm. Top nhóm theo TPV/MPU:"
         )
         for item in breakdown.get("items", [])[:8]:
             latest = item.get("latest", {})
             lines.append(
                 f"  - {item.get('name')}: TPV {format_number(latest.get('tpv'))}, "
-                f"MPU/users {format_number(latest.get('mpu'))}, "
+                f"MPU {format_number(latest.get('mpu'))}, "
                 f"TPV change {pct_text(item.get('tpv_change'))}, trạng thái {item.get('health')}."
             )
         lines.append("- Nếu muốn soi một AppID cụ thể, hỏi trực tiếp mã AppID/SKU để agent lọc đúng row liên quan.")
@@ -1175,12 +1196,19 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
             lines.append(
                 f"- Tableau live đã gọi Insurance Performance với filter {performance_filters} cho AppID/SKU {requested_app_id}."
             )
+            latest_metrics = {"tpv": latest.get("tpv"), "mpu": latest.get("users"), "aov": latest.get("aov")}
+            previous_metrics = {"tpv": previous.get("tpv"), "mpu": previous.get("users"), "aov": previous.get("aov")}
+            changes = []
+            if "tpv" in requested_metrics:
+                changes.append(f"TPV change {pct_text(perf.get('tpv_change'))}")
+            if "mpu" in requested_metrics:
+                changes.append(f"MPU change {pct_text(perf.get('user_change'))}")
             lines.append(
-                f"- Kết quả view sau filter: {latest.get('period')} TPV {format_number(latest.get('tpv'))}, "
-                f"MPU/users {format_number(latest.get('users'))}; so với {previous.get('period', 'kỳ trước')} "
-                f"TPV change {pct_text(perf.get('tpv_change'))}, MPU/users change {pct_text(perf.get('user_change'))}, "
+                f"- Kết quả view sau filter: {latest.get('period')} {', '.join(metric_parts_for_answer(latest_metrics, requested_metrics))}; "
+                f"so với {previous.get('period', 'kỳ trước')} {', '.join(changes)}, "
                 f"trạng thái {perf.get('health')}."
             )
+            lines.append(f"- Baseline: {', '.join(metric_parts_for_answer(previous_metrics, requested_metrics))}.")
             lines.append(
                 "- Nếu số này vẫn ra tổng All, cần đổi `TABLEAU_PERFORMANCE_APPID_FILTER_FIELDS` sang đúng tên filter trên Atlas hoặc cung cấp exact SKU value."
             )
@@ -1214,6 +1242,93 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
         f"{missing_reason or 'Hiện payload chưa đủ dimension để trả lời theo từng sản phẩm.'}"
     )
     lines.append("- Hành động đề xuất: lọc dashboard theo Product Name hoặc Break View = product/SKU rồi paste CSV vào payload.")
+    return "\n".join(lines)
+
+
+KEY_REPORT_PRODUCTS = [
+    {"code": "4491", "owner": "Hân", "name": "Bảo hiểm Sống An Vui ChubbGI"},
+    {"code": "3507", "owner": "Hân", "name": "Bảo hiểm Savemoney Ô tô TNDS"},
+    {"code": "4326", "owner": "Hân", "name": "Bảo hiểm Trách nhiệm dân sự bắt buộc"},
+    {"code": "3394", "owner": "Trân", "name": "Bảo hiểm màn hình điện thoại"},
+    {"code": "3682", "owner": "Trân", "name": "Bảo hiểm an ninh mạng VBI"},
+    {"code": "3274", "owner": "Trân", "name": "Bảo hiểm du lịch nội địa"},
+]
+
+
+def find_breakdown_item_by_code(breakdown: Dict[str, Any], code: str) -> Optional[Dict[str, Any]]:
+    for item in breakdown.get("items", []):
+        if code in digits_only(item.get("name", "")):
+            return item
+        raw_latest = item.get("raw_latest", {})
+        if row_matches_app_id(raw_latest, code):
+            return item
+    return None
+
+
+def build_daily_email_report(summaries: Dict[str, Any]) -> str:
+    performance = summaries.get("performance", {})
+    traffic = summaries.get("traffic", {})
+    product_breakdown = summaries.get("breakdowns", {}).get("product_performance", {})
+    source_breakdown = summaries.get("breakdowns", {}).get("traffic_source", {})
+    latest_period = "T-1"
+    if performance.get("latest", {}).get("cutoff"):
+        latest_period = performance["latest"]["cutoff"]
+    elif performance.get("latest", {}).get("period"):
+        latest_period = performance["latest"]["period"]
+
+    lines = [
+        f"[Bé Hadi] Daily Insurance Pulse - {latest_period}",
+        "",
+        "1. Performance key AppID",
+    ]
+    for owner in ["Hân", "Trân"]:
+        lines.append(f"{owner}:")
+        owner_products = [product for product in KEY_REPORT_PRODUCTS if product["owner"] == owner]
+        for product in owner_products:
+            item = find_breakdown_item_by_code(product_breakdown, product["code"]) if product_breakdown.get("available") else None
+            if item:
+                latest = item.get("latest", {})
+                lines.append(
+                    f"- {product['code']} - {product['name']}: TPV {format_number(latest.get('tpv'))}, "
+                    f"MPU {format_number(latest.get('mpu'))}, TPV change {pct_text(item.get('tpv_change'))}, "
+                    f"MPU change {pct_text(item.get('mpu_change'))}, trạng thái {item.get('health')}."
+                )
+            else:
+                lines.append(f"- {product['code']} - {product['name']}: chưa có row AppID/SKU trong export hiện tại.")
+
+    lines.extend(["", "2. Traffic"])
+    if traffic.get("available"):
+        latest = traffic.get("latest", {})
+        lines.append(
+            f"- All: Load {format_number(latest.get('load'))}, Cashier {format_number(latest.get('cashier'))}, "
+            f"Success {format_number(latest.get('success'))}, Success rate "
+            f"{format_number((latest.get('success_rate') or 0) * 100, '%') if latest.get('success_rate') is not None else 'N/A'}."
+        )
+    else:
+        lines.append("- Chưa có dữ liệu traffic.")
+
+    if source_breakdown.get("available"):
+        top_sources = sorted(
+            source_breakdown.get("items", []),
+            key=lambda item: item.get("latest", {}).get("success") or 0,
+            reverse=True,
+        )[:3]
+        lines.append("- Top 3 source theo Success:")
+        for item in top_sources:
+            latest = item.get("latest", {})
+            lines.append(
+                f"  - {item.get('name')}: Load {format_number(latest.get('load'))}, "
+                f"Cashier {format_number(latest.get('cashier'))}, Success {format_number(latest.get('success'))}."
+            )
+    else:
+        lines.append("- Chưa có breakdown source để xếp top 3 source theo Success.")
+
+    lines.extend([
+        "",
+        "3. Ghi chú",
+        "- Báo cáo dùng số T-1/gần nhất mà Tableau trả về.",
+        "- Nếu một AppID thiếu row, cần kiểm tra filter AppID/SKU hoặc export Break View từ dashboard Performance/Traffic.",
+    ])
     return "\n".join(lines)
 
 
@@ -1349,6 +1464,11 @@ def handle_payload(payload: dict, context: RequestContext) -> dict:
             "session_id": context.session_id,
         }
 
+    if payload.get("action") == "daily_email_report":
+        payload = dict(payload)
+        payload["message"] = payload.get("message") or "Tạo daily report T-1 cho Insurance Performance và Traffic."
+        payload["mode"] = "performance"
+
     if payload.get("action") == "tableau_status" or message.lower() in {
         "tableau_status",
         "status tableau",
@@ -1429,6 +1549,34 @@ def handle_payload(payload: dict, context: RequestContext) -> dict:
         },
         "focus_matches": find_focus_matches(message, datasets),
     }
+
+    if payload.get("action") == "daily_email_report":
+        response = build_daily_email_report(summaries)
+        return {
+            "status": "success",
+            "agent": "be-hadi-bao-hiem",
+            "mode": "daily_email_report",
+            "response": response,
+            "email": {
+                "subject": f"[Bé Hadi] Daily Insurance Pulse - {datetime.now().strftime('%Y-%m-%d')}",
+                "recipients": [
+                    "hanlgb@vng.com.vn",
+                    "mynt5@vng.com.vn",
+                    "tramntq@vng.com.vn",
+                    "tranvhd@vng.com.vn",
+                ],
+            },
+            "llm": {
+                "configured": bool(env_value("LLM_API_KEY", "AI_PLATFORM_API_KEY")),
+                "used": False,
+                "error": None,
+            },
+            "data_source": summaries["data_source"],
+            "knowledge_base": KNOWLEDGE_BASE.status(),
+            "summaries": summaries,
+            "timestamp": datetime.now().isoformat(),
+            "session_id": context.session_id,
+        }
 
     resolved_mode = classify_intent(message, mode)
     llm_result = call_llm_if_configured(message, summaries, resolved_mode)

@@ -36,3 +36,15 @@ Daily report should be sent to:
 - tranvhd@vng.com.vn
 
 The exact sending mechanism can be SMTP, Microsoft Graph, or draft generation, depending on available credentials.
+
+Report timing and content:
+
+- Send every morning using T-1 data. Example: on the 11th, report numbers for the 10th.
+- Performance section: TPV and MPU for active/key AppID products. If there are too many active AppIDs, prioritize key products highlighted red in the product catalog.
+- Split performance commentary by PIC:
+  - Hân: key products managed by Hân.
+  - Trân: remaining key products managed by Trân.
+- For each product, state current TPV/MPU, change versus previous comparable period, and status.
+- Traffic section: summarize each app overall when available.
+- Traffic source section: list top 3 sources by Success. Show Load, Cashier, and Success for each top source.
+- Use only dashboard fields that exist. Do not include NPU/FPU in daily report unless a future dashboard explicitly provides those fields.

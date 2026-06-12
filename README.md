@@ -2,7 +2,7 @@
 
 Bé Hadi Bảo hiểm is an AI Business Analyst for insurance product performance.
 
-The agent helps the Insurance team analyze TPV, MPU/users, traffic funnel, incentive cost, product contribution, and monthly report insights from Tableau/Atlas dashboard exports.
+The agent helps the Insurance team analyze TPV, MPU, traffic funnel, product contribution, and daily/monthly report insights from Tableau/Atlas dashboard exports.
 
 ## What It Does
 
@@ -189,7 +189,33 @@ The MCP HTTP transport defaults to `http://localhost:3927/tableau-mcp`. This is 
 }
 ```
 
-For product-specific questions, export/paste columns such as `App ID`, `SKU Name`, `Product Name`, `App Name`, `TPV`, `MPU`, `NPU`, `FPU`, `AOV`, and a period/date column. The agent will answer by product/AppID/SKU when those fields exist.
+For product-specific questions, export/paste columns such as `App ID`, `SKU Name`, `Product Name`, `App Name`, `TPV`, `MPU`, `AOV`, and a period/date column. The agent will answer by product/AppID/SKU when those fields exist. If the user asks for only one metric, such as TPV, the response focuses on that metric.
+
+## Daily Email Report
+
+Bé Hadi can generate the T-1 daily email report for the Insurance team:
+
+```bash
+curl -s -X POST "$AGENT_ENDPOINT/invocations" \
+  -H "Content-Type: application/json" \
+  -H "X-GreenNode-AgentBase-User-Id: daily-email-job" \
+  -H "X-GreenNode-AgentBase-Session-Id: daily-email-job" \
+  -d '{"action":"daily_email_report","use_tableau_live":true}'
+```
+
+To send the email via SMTP:
+
+```bash
+export SMTP_HOST="smtp.example.com"
+export SMTP_PORT="587"
+export SMTP_USERNAME="your-email@vng.com.vn"
+export SMTP_PASSWORD="your-password-or-app-password"
+export SMTP_FROM="your-email@vng.com.vn"
+export DAILY_REPORT_RECIPIENTS="hanlgb@vng.com.vn,mynt5@vng.com.vn,tramntq@vng.com.vn,tranvhd@vng.com.vn"
+python3 scripts/send_daily_email_report.py
+```
+
+Schedule that command every morning after Tableau refresh. The report uses the latest T-1 data returned by Tableau and includes key AppID performance split by owner plus top 3 traffic sources by Success.
 
 ## Notes
 
