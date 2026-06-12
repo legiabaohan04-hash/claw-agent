@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 420" role="img" aria-label="Bé Hadi">
+  <rect width="420" height="420" fill="none"/>
+  <ellipse cx="210" cy="390" rx="110" ry="14" fill="#d9e6fa"/>
+  <circle cx="210" cy="185" r="128" fill="#ff9b1a"/>
+  <path d="M93 107c17-55 66-52 78 2" fill="#f18913"/>
+  <path d="M249 109c12-53 61-58 78-5" fill="#f18913"/>
+  <path d="M108 203c28 74 177 76 204 0 0 86-37 159-102 159S108 289 108 203z" fill="#ffe2a7"/>
+  <circle cx="164" cy="166" r="32" fill="#fff"/>
+  <circle cx="256" cy="166" r="32" fill="#fff"/>
+  <circle cx="164" cy="166" r="22" fill="#10162b"/>
+  <circle cx="256" cy="166" r="22" fill="#10162b"/>
+  <circle cx="154" cy="154" r="7" fill="#fff"/>
+  <circle cx="246" cy="154" r="7" fill="#fff"/>
+  <path d="M202 208c5 6 11 6 16 0" fill="none" stroke="#6b2b14" stroke-width="7" stroke-linecap="round"/>
+  <path d="M164 238c18 18 74 18 92 0" fill="none" stroke="#6b2b14" stroke-width="8" stroke-linecap="round"/>
+  <path d="M96 255c52 27 174 28 228 0l-33 75H129z" fill="#1767df"/>
+  <text x="191" y="318" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" fill="#fff">H</text>
+</svg>
