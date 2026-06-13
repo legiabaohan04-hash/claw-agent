@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=preview.html">
   <title>Bé Hadi Bảo hiểm</title>
   <style>
     body {
@@ -23,5 +22,10 @@
 </head>
 <body>
   <p>Đang mở Bé Hadi Bảo hiểm... <a href="preview.html">Bấm vào đây nếu trang chưa tự chuyển</a>.</p>
+  <script>
+    const target = new URL("preview.html", window.location.href);
+    target.search = window.location.search || `?v=${Date.now()}`;
+    window.location.replace(target.toString());
+  </script>
 </body>
 </html>

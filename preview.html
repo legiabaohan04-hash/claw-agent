@@ -473,7 +473,9 @@
     const PUBLIC_AGENT_ENDPOINT = "https://endpoint-14358055-e169-46fc-9328-8e14537c46cd.agentbase-runtime.aiplatform.vngcloud.vn";
     const LOCAL_AGENT_ENDPOINT = "http://localhost:8080";
     const isLocalHost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
-    const forceLocalLive = new URLSearchParams(window.location.search).get("live") === "local";
+    const liveMode = new URLSearchParams(window.location.search).get("live") || "local";
+    const forceLocalLive = liveMode === "local";
+    const forcePublicLive = liveMode === "public";
     const API_BASE = isLocalHost ? "" : PUBLIC_AGENT_ENDPOINT;
 
     const demoPayload = {
@@ -552,13 +554,10 @@
       if (isLocalHost) {
         return [{ base: "", label: "local live" }];
       }
-      if (forceLocalLive) {
-        return [{ base: LOCAL_AGENT_ENDPOINT, label: "local live qua VPN" }];
+      if (forcePublicLive) {
+        return [{ base: PUBLIC_AGENT_ENDPOINT, label: "AgentBase public" }];
       }
-      return [
-        { base: LOCAL_AGENT_ENDPOINT, label: "local live qua VPN" },
-        { base: PUBLIC_AGENT_ENDPOINT, label: "AgentBase public" }
-      ];
+      return [{ base: LOCAL_AGENT_ENDPOINT, label: "local live" }];
     }
 
     function formatFileSize(bytes) {
@@ -628,7 +627,7 @@
       try {
         for (const endpoint of endpointCandidates()) {
           const controller = new AbortController();
-          const timeoutId = window.setTimeout(() => controller.abort(), endpoint.base === LOCAL_AGENT_ENDPOINT ? 25000 : 120000);
+          const timeoutId = window.setTimeout(() => controller.abort(), 120000);
           try {
             answerEl.textContent = "Bé Hadi đang phân tích...";
             const res = await fetch(`${endpoint.base}/invocations`, {
@@ -669,9 +668,9 @@
           "",
           ...errors.map((item) => `- ${item}`),
           "",
-          forceLocalLive
-            ? "Trang đang ở chế độ live local. Hãy bật VPN và chạy helper local ở Terminal trước khi bấm phân tích lại."
-            : "Nếu muốn dùng Tableau live, hãy bật VPN và chạy helper lấy dữ liệu trước khi bấm phân tích lại."
+          forcePublicLive
+            ? "Endpoint public hiện chưa có quyền vào Atlas. Hãy chạy bằng helper local hoặc cấu hình runtime trong network/VPC có quyền truy cập Atlas."
+            : "Hãy bật VPN và chạy helper local ở Terminal trước khi bấm phân tích lại."
         ].join("\n");
       } finally {
         analyzeBtn.disabled = false;
