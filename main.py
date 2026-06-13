@@ -433,7 +433,7 @@ def fetch_tableau_proxy_live_data(message: str) -> Dict[str, Any]:
 
 
 def fetch_tableau_live_data(message: str) -> Dict[str, Any]:
-    if env_value("TABLEAU_PROXY_URL"):
+    if env_value("TABLEAU_PROXY_URL") and not bool_env("FORCE_DIRECT_TABLEAU", default=False):
         return fetch_tableau_proxy_live_data(message)
 
     metadata = {"enabled": True, "used": False, "errors": [], "views": {}}

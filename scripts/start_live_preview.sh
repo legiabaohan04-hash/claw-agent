@@ -15,6 +15,10 @@ if grep -q "^TABLEAU_AUTO_REFRESH=" .env 2>/dev/null; then
   grep -v "^TABLEAU_AUTO_REFRESH=" .env > .env.tmp && mv .env.tmp .env
 fi
 echo "TABLEAU_AUTO_REFRESH=true" >> .env
+if grep -q "^FORCE_DIRECT_TABLEAU=" .env 2>/dev/null; then
+  grep -v "^FORCE_DIRECT_TABLEAU=" .env > .env.tmp && mv .env.tmp .env
+fi
+echo "FORCE_DIRECT_TABLEAU=true" >> .env
 chmod 600 .env
 
 if [[ ! -d "venv" ]]; then
@@ -26,6 +30,7 @@ python -m pip install --upgrade pip >/dev/null
 pip install -r requirements.txt >/dev/null
 
 export TABLEAU_AUTO_REFRESH=true
+export FORCE_DIRECT_TABLEAU=true
 unset TABLEAU_PROXY_URL
 unset TABLEAU_PROXY_URLS
 unset TABLEAU_PROXY_TOKEN
