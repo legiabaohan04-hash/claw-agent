@@ -206,13 +206,15 @@ curl -s -X POST "$AGENT_ENDPOINT/invocations" \
 To send the email via SMTP:
 
 ```bash
-export SMTP_HOST="smtp.example.com"
-export SMTP_PORT="587"
-export SMTP_USERNAME="your-email@vng.com.vn"
-export SMTP_PASSWORD="your-password-or-app-password"
-export SMTP_FROM="your-email@vng.com.vn"
-export DAILY_REPORT_RECIPIENTS="hanlgb@vng.com.vn,mynt5@vng.com.vn,tramntq@vng.com.vn,tranvhd@vng.com.vn"
+cp .env.example .env
+# Fill SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM in .env.
 python3 scripts/send_daily_email_report.py
+```
+
+To test-send only to Han:
+
+```bash
+python3 scripts/send_daily_email_report.py --to hanlgb@vng.com.vn
 ```
 
 Schedule that command every morning after Tableau refresh. The report uses the latest T-1 data returned by Tableau and includes key AppID performance split by owner plus top 3 traffic sources by Success.

@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import os
 import smtplib
 import ssl
 import urllib.request
 from email.message import EmailMessage
+
+try:
+    from dotenv import load_dotenv
+except Exception:
+    def load_dotenv():
+        return False
 
 
 DEFAULT_ENDPOINT = "https://endpoint-14358055-e169-46fc-9328-8e14537c46cd.agentbase-runtime.aiplatform.vngcloud.vn"
@@ -63,15 +70,28 @@ def send_email(subject, body, recipients):
 
 
 def main():
+    load_dotenv()
+    parser = argparse.ArgumentParser(description="Send Bé Hadi daily Insurance report by email.")
+    parser.add_argument("--to", default="", help="Comma-separated test recipients. Overrides DAILY_REPORT_RECIPIENTS.")
+    parser.add_argument("--dry-run", action="store_true", help="Print the email body without sending.")
+    args = parser.parse_args()
+
     endpoint = env("AGENT_ENDPOINT", DEFAULT_ENDPOINT)
     result = call_agent(endpoint)
+    recipient_source = args.to or env("DAILY_REPORT_RECIPIENTS", ",".join(DEFAULT_RECIPIENTS))
     recipients = [
         item.strip()
-        for item in env("DAILY_REPORT_RECIPIENTS", ",".join(DEFAULT_RECIPIENTS)).split(",")
+        for item in recipient_source.split(",")
         if item.strip()
     ]
     subject = result.get("email", {}).get("subject") or "[Bé Hadi] Daily Insurance Pulse"
     body = result.get("response") or json.dumps(result, ensure_ascii=False, indent=2)
+    if args.dry_run:
+        print(f"To: {', '.join(recipients)}")
+        print(f"Subject: {subject}")
+        print("")
+        print(body)
+        return
     send_email(subject, body, recipients)
     print(f"Sent daily report to {', '.join(recipients)}")
 

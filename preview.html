@@ -159,14 +159,15 @@
       line-height: 1.12;
       font-weight: 950;
       letter-spacing: 0;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      white-space: nowrap;
     }
 
     .hero-title-row .title-wordmark {
-      width: clamp(118px, 18vw, 180px);
+      width: clamp(104px, 15vw, 150px);
       height: auto;
       display: inline-block;
-      transform: translateY(7px);
+      transform: translateY(5px);
     }
 
     .hero-mascot {
@@ -387,6 +388,8 @@
 
       .hero-title-row {
         justify-content: center;
+        flex-wrap: wrap;
+        white-space: normal;
       }
 
       .mode-tabs {
@@ -508,6 +511,7 @@
     const guideListEl = document.querySelector("#guide-list");
     const fileInputEl = document.querySelector("#file-input");
     const fileListEl = document.querySelector("#file-list");
+    const analyzeBtn = document.querySelector("#analyze");
     let currentMode = "performance";
     let uploadedFiles = [];
 
@@ -603,24 +607,43 @@
 
     async function postPayload(payload) {
       answerEl.textContent = "Bé Hadi đang phân tích...";
-      const res = await fetch(`${API_BASE}/invocations`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-GreenNode-AgentBase-User-Id": "preview-user",
-          "X-GreenNode-AgentBase-Session-Id": "preview-session"
-        },
-        body: JSON.stringify(payload)
-      });
-      const text = await res.text();
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = "Đang phân tích...";
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 120000);
       try {
-        const parsed = JSON.parse(text);
-        const llmNote = parsed.llm && parsed.llm.error
-          ? `\n\nLưu ý: LLM chưa chạy được (${parsed.llm.error.type}). Bé Hadi đang dùng fallback rule-based. Kiểm tra lại LLM_MODEL/base URL trong .env.`
-          : "";
-        answerEl.textContent = (parsed.response || JSON.stringify(parsed.knowledge_base || parsed, null, 2)) + llmNote;
-      } catch {
-        answerEl.textContent = text;
+        const res = await fetch(`${API_BASE}/invocations`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          answerEl.textContent = `Bé Hadi gọi AgentBase chưa thành công (HTTP ${res.status}).\n${text.slice(0, 1200)}`;
+          return;
+        }
+        try {
+          const parsed = JSON.parse(text);
+          const llmNote = parsed.llm && parsed.llm.error
+            ? `\n\nLưu ý: LLM chưa chạy được (${parsed.llm.error.type}). Bé Hadi đang dùng fallback rule-based. Kiểm tra lại LLM_MODEL/base URL trong .env.`
+            : "";
+          answerEl.textContent = (parsed.response || JSON.stringify(parsed.knowledge_base || parsed, null, 2)) + llmNote;
+        } catch {
+          answerEl.textContent = text || "Bé Hadi đã nhận request nhưng response đang rỗng.";
+        }
+      } catch (error) {
+        if (error.name === "AbortError") {
+          answerEl.textContent = "Bé Hadi phản hồi quá lâu nên request đã dừng. Thử lại sau khi runtime vừa deploy xong vài phút.";
+        } else {
+          answerEl.textContent = `Bé Hadi chưa gọi được AgentBase endpoint.\nLỗi: ${error.message || error}\n\nNếu đang mở từ GitHub Pages, hãy deploy lại AgentBase bản mới để bật CORS cho browser.`;
+        }
+      } finally {
+        window.clearTimeout(timeoutId);
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = "Phân tích ngay";
       }
     }
 
@@ -633,7 +656,7 @@
       }
     }
 
-    document.querySelector("#analyze").addEventListener("click", () => {
+    analyzeBtn.addEventListener("click", () => {
       try {
         const payload = JSON.parse(payloadEl.value);
         payload.message = questionEl.value.trim() || demoPayload.message;

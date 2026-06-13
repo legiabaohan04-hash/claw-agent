@@ -47,7 +47,19 @@ except Exception:  # pragma: no cover - optional dependency at runtime
 
 load_dotenv()
 
-app = GreenNodeAgentBaseApp() if GreenNodeAgentBaseApp else None
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+# GitHub Pages calls the runtime directly from the browser, so the default
+# runtime must expose normal HTTP routes with CORS enabled. The GreenNode SDK
+# app can still be enabled explicitly if needed for platform-native tests.
+USE_GREENNODE_AGENTBASE_APP = env_flag("USE_GREENNODE_AGENTBASE_APP", False)
+app = GreenNodeAgentBaseApp() if (USE_GREENNODE_AGENTBASE_APP and GreenNodeAgentBaseApp) else None
 ROOT = Path(__file__).resolve().parent
 KB_DIR = ROOT / "knowledge_base"
 KNOWLEDGE_BASE = load_knowledge_base(KB_DIR)
@@ -1730,7 +1742,7 @@ else:
 
     @app.get("/health")
     async def health_check() -> Dict[str, str]:
-        return {"status": "healthy", "mode": "fastapi-local-fallback"}
+        return {"status": "healthy", "mode": "fastapi-cors-runtime"}
 
     @app.get("/")
     async def preview() -> FileResponse:
@@ -1739,6 +1751,10 @@ else:
     @app.get("/data_exports/tableau-live-payload.json")
     async def tableau_live_payload() -> FileResponse:
         return FileResponse(ROOT / "data_exports" / "tableau-live-payload.json")
+
+    @app.options("/{path:path}")
+    async def options_preflight(path: str) -> Dict[str, str]:
+        return {"status": "ok"}
 
     @app.post("/invocations")
     async def invoke(request: Request) -> Dict[str, Any]:
@@ -1750,13 +1766,14 @@ else:
             request_headers=dict(request.headers),
         )
         response = handle_payload(payload, context)
-        response["runtime_mode"] = "fastapi-local-fallback"
-        response["agentbase_import_error"] = str(AGENTBASE_IMPORT_ERROR)
+        response["runtime_mode"] = "fastapi-cors-runtime"
+        if AGENTBASE_IMPORT_ERROR:
+            response["agentbase_import_error"] = str(AGENTBASE_IMPORT_ERROR)
         return response
 
 
 if __name__ == "__main__":
-    if GreenNodeAgentBaseApp:
+    if USE_GREENNODE_AGENTBASE_APP and GreenNodeAgentBaseApp:
         app.run(port=8080, host="0.0.0.0")
     else:
         import uvicorn
