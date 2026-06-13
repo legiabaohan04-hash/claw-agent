@@ -471,6 +471,7 @@
 
   <script>
     const PUBLIC_AGENT_ENDPOINT = "https://endpoint-14358055-e169-46fc-9328-8e14537c46cd.agentbase-runtime.aiplatform.vngcloud.vn";
+    const LOCAL_AGENT_ENDPOINT = "http://localhost:8080";
     const isLocalHost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
     const API_BASE = isLocalHost ? "" : PUBLIC_AGENT_ENDPOINT;
 
@@ -546,6 +547,16 @@
       });
     }
 
+    function endpointCandidates() {
+      if (isLocalHost) {
+        return [{ base: "", label: "local live" }];
+      }
+      return [
+        { base: LOCAL_AGENT_ENDPOINT, label: "local live qua VPN" },
+        { base: PUBLIC_AGENT_ENDPOINT, label: "AgentBase public" }
+      ];
+    }
+
     function formatFileSize(bytes) {
       if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
       if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -609,51 +620,72 @@
       answerEl.textContent = "Bé Hadi đang phân tích...";
       analyzeBtn.disabled = true;
       analyzeBtn.textContent = "Đang phân tích...";
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 120000);
+      const errors = [];
       try {
-        const res = await fetch(`${API_BASE}/invocations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-        const text = await res.text();
-        if (!res.ok) {
-          answerEl.textContent = `Bé Hadi gọi AgentBase chưa thành công (HTTP ${res.status}).\n${text.slice(0, 1200)}`;
-          return;
+        for (const endpoint of endpointCandidates()) {
+          const controller = new AbortController();
+          const timeoutId = window.setTimeout(() => controller.abort(), endpoint.base === LOCAL_AGENT_ENDPOINT ? 25000 : 120000);
+          try {
+            answerEl.textContent = `Bé Hadi đang phân tích qua ${endpoint.label}...`;
+            const res = await fetch(`${endpoint.base}/invocations`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal
+            });
+            const text = await res.text();
+            if (!res.ok) {
+              errors.push(`${endpoint.label}: HTTP ${res.status} ${text.slice(0, 400)}`);
+              continue;
+            }
+            try {
+              const parsed = JSON.parse(text);
+              const llmNote = parsed.llm && parsed.llm.error
+                ? `\n\nLưu ý: LLM chưa chạy được (${parsed.llm.error.type}). Bé Hadi đang dùng fallback rule-based. Kiểm tra lại LLM_MODEL/base URL trong .env.`
+                : "";
+              const sourceNote = endpoint.label.includes("local")
+                ? "\n\nNguồn chạy: local live qua máy đang bật VPN."
+                : "";
+              answerEl.textContent = (parsed.response || JSON.stringify(parsed.knowledge_base || parsed, null, 2)) + llmNote + sourceNote;
+            } catch {
+              answerEl.textContent = text || "Bé Hadi đã nhận request nhưng response đang rỗng.";
+            }
+            return;
+          } catch (error) {
+            const message = error.name === "AbortError" ? "timeout" : (error.message || error);
+            errors.push(`${endpoint.label}: ${message}`);
+          } finally {
+            window.clearTimeout(timeoutId);
+          }
         }
-        try {
-          const parsed = JSON.parse(text);
-          const llmNote = parsed.llm && parsed.llm.error
-            ? `\n\nLưu ý: LLM chưa chạy được (${parsed.llm.error.type}). Bé Hadi đang dùng fallback rule-based. Kiểm tra lại LLM_MODEL/base URL trong .env.`
-            : "";
-          answerEl.textContent = (parsed.response || JSON.stringify(parsed.knowledge_base || parsed, null, 2)) + llmNote;
-        } catch {
-          answerEl.textContent = text || "Bé Hadi đã nhận request nhưng response đang rỗng.";
-        }
-      } catch (error) {
-        if (error.name === "AbortError") {
-          answerEl.textContent = "Bé Hadi phản hồi quá lâu nên request đã dừng. Thử lại sau khi runtime vừa deploy xong vài phút.";
-        } else {
-          answerEl.textContent = `Bé Hadi chưa gọi được AgentBase endpoint.\nLỗi: ${error.message || error}\n\nNếu đang mở từ GitHub Pages, hãy deploy lại AgentBase bản mới để bật CORS cho browser.`;
-        }
+        answerEl.textContent = [
+          "Bé Hadi chưa gọi được nguồn dữ liệu live.",
+          "",
+          ...errors.map((item) => `- ${item}`),
+          "",
+          "Nếu muốn dùng Tableau live như lúc đầu đã connect được: bật VPN, chạy local live helper ở Terminal, rồi bấm phân tích lại trên trang này."
+        ].join("\n");
       } finally {
-        window.clearTimeout(timeoutId);
         analyzeBtn.disabled = false;
         analyzeBtn.textContent = "Phân tích ngay";
       }
     }
 
     async function checkHealth() {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        setStatus(res.ok, res.ok ? "Bé Hadi sẵn sàng" : "Đã mở giao diện");
-      } catch {
-        setStatus(false, "Đã mở giao diện");
+      for (const endpoint of endpointCandidates()) {
+        try {
+          const res = await fetch(`${endpoint.base}/health`, { cache: "no-store" });
+          if (res.ok) {
+            setStatus(true, endpoint.label.includes("local") ? "Local live đã sẵn sàng" : "Bé Hadi sẵn sàng");
+            return;
+          }
+        } catch {
+          // Try the next endpoint.
+        }
       }
+      setStatus(false, "Đã mở giao diện");
     }
 
     analyzeBtn.addEventListener("click", () => {

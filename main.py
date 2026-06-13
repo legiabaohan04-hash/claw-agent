@@ -1349,7 +1349,14 @@ def build_product_answer(summaries: Dict[str, Any]) -> str:
         if tableau.get("used"):
             lines.append("- Nguồn dữ liệu hiện tại: Tableau live export. View đang trả aggregate nếu không thấy AppID/SKU.")
         if tableau.get("errors"):
-            lines.append(f"- Tableau live có lỗi: {'; '.join(tableau.get('errors', [])[:2])}.")
+            tableau_errors = tableau.get("errors", [])[:2]
+            lines.append(f"- Tableau live có lỗi: {'; '.join(tableau_errors)}.")
+            if any("403" in str(error) or "Forbidden" in str(error) for error in tableau_errors):
+                lines.append(
+                    "- Lỗi này thường do AgentBase public runtime bị Atlas/nginx chặn khi gọi Tableau trực tiếp. "
+                    "Cần chạy runtime trong VPC có quyền vào Atlas hoặc cấu hình `TABLEAU_PROXY_URL` trỏ tới bridge HTTPS từ máy có VPN."
+                )
+                return "\n".join(lines)
     missing_reason = breakdown.get("reason") if breakdown else None
     lines.append(
         "- Cần export thêm breakdown theo Product Name/App Name/SKU/App ID. "
