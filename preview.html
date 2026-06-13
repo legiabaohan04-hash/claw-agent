@@ -473,6 +473,7 @@
     const PUBLIC_AGENT_ENDPOINT = "https://endpoint-14358055-e169-46fc-9328-8e14537c46cd.agentbase-runtime.aiplatform.vngcloud.vn";
     const LOCAL_AGENT_ENDPOINT = "http://localhost:8080";
     const isLocalHost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+    const forceLocalLive = new URLSearchParams(window.location.search).get("live") === "local";
     const API_BASE = isLocalHost ? "" : PUBLIC_AGENT_ENDPOINT;
 
     const demoPayload = {
@@ -551,6 +552,9 @@
       if (isLocalHost) {
         return [{ base: "", label: "local live" }];
       }
+      if (forceLocalLive) {
+        return [{ base: LOCAL_AGENT_ENDPOINT, label: "local live qua VPN" }];
+      }
       return [
         { base: LOCAL_AGENT_ENDPOINT, label: "local live qua VPN" },
         { base: PUBLIC_AGENT_ENDPOINT, label: "AgentBase public" }
@@ -626,7 +630,7 @@
           const controller = new AbortController();
           const timeoutId = window.setTimeout(() => controller.abort(), endpoint.base === LOCAL_AGENT_ENDPOINT ? 25000 : 120000);
           try {
-            answerEl.textContent = `Bé Hadi đang phân tích qua ${endpoint.label}...`;
+            answerEl.textContent = "Bé Hadi đang phân tích...";
             const res = await fetch(`${endpoint.base}/invocations`, {
               method: "POST",
               headers: {
@@ -646,7 +650,7 @@
                 ? `\n\nLưu ý: LLM chưa chạy được (${parsed.llm.error.type}). Bé Hadi đang dùng fallback rule-based. Kiểm tra lại LLM_MODEL/base URL trong .env.`
                 : "";
               const sourceNote = endpoint.label.includes("local")
-                ? "\n\nNguồn chạy: local live qua máy đang bật VPN."
+                ? "\n\nNguồn dữ liệu: Tableau live."
                 : "";
               answerEl.textContent = (parsed.response || JSON.stringify(parsed.knowledge_base || parsed, null, 2)) + llmNote + sourceNote;
             } catch {
@@ -665,7 +669,9 @@
           "",
           ...errors.map((item) => `- ${item}`),
           "",
-          "Nếu muốn dùng Tableau live như lúc đầu đã connect được: bật VPN, chạy local live helper ở Terminal, rồi bấm phân tích lại trên trang này."
+          forceLocalLive
+            ? "Trang đang ở chế độ live local. Hãy bật VPN và chạy helper local ở Terminal trước khi bấm phân tích lại."
+            : "Nếu muốn dùng Tableau live, hãy bật VPN và chạy helper lấy dữ liệu trước khi bấm phân tích lại."
         ].join("\n");
       } finally {
         analyzeBtn.disabled = false;
@@ -678,7 +684,7 @@
         try {
           const res = await fetch(`${endpoint.base}/health`, { cache: "no-store" });
           if (res.ok) {
-            setStatus(true, endpoint.label.includes("local") ? "Local live đã sẵn sàng" : "Bé Hadi sẵn sàng");
+            setStatus(true, "Bé Hadi đã sẵn sàng");
             return;
           }
         } catch {
